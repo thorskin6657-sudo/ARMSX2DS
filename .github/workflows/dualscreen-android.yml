@@ -1,0 +1,92 @@
+# Builds an installable ARMSX2 APK with the dual-screen companion.
+#
+# Run it from the Actions tab (Run workflow) or push to the `dualscreen-companion` branch.
+# The APK lands in the run's Artifacts as `armsx2-dualscreen-arm64`.
+#
+# SIGNING: an APK can only be updated in place by a build signed with the same key. A fresh CI
+# runner makes a new debug key every run, so without a stored key each build must be uninstalled
+# first (losing in-app data). Add ONE repo secret to avoid that:
+#   DEBUG_KEYSTORE_B64   base64 of a debug.keystore you generate once, e.g.
+#     keytool -genkeypair -keystore debug.keystore -storepass android -alias androiddebugkey \
+#       -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+#     base64 -w0 debug.keystore      (macOS: base64 -i debug.keystore)
+name: Dual-screen Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      page_size:
+        description: "Host page size. 0x1000 (4K) suits Android 13/14 handhelds; 0x4000 (16K) is for 16K-page Android 15+ devices."
+        type: choice
+        default: "0x1000"
+        options: ["0x1000", "0x4000"]
+  push:
+    branches: [dualscreen-companion]
+
+concurrency:
+  group: dualscreen-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android APK (dual-screen companion)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    defaults:
+      run:
+        working-directory: platforms/android
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      # Same NDK / CMake pins the project's own nightly job uses.
+      - name: Install NDK + CMake
+        run: yes | sdkmanager "ndk;28.2.13676358" "cmake;3.31.6" >/dev/null || true
+
+      - name: Fetch shaderc third-party deps
+        run: python3 app/src/main/cpp/3rdparty/shaderc/utils/git-sync-deps
+
+      - name: Install Rust Android target
+        run: rustup target add aarch64-linux-android
+
+      - name: Restore signing key (optional)
+        env:
+          DEBUG_KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ -n "$DEBUG_KEYSTORE_B64" ]; then
+            printf '%s' "$DEBUG_KEYSTORE_B64" | base64 -d > "$HOME/.android/debug.keystore"
+            echo "Using the DEBUG_KEYSTORE_B64 signing key."
+          else
+            echo "::warning::No DEBUG_KEYSTORE_B64 secret: this APK gets a throwaway key and cannot update over a previous build."
+          fi
+
+      # The `github` flavor is the sideload build (the project's own test-APK script uses the same
+      # task). A separate application id and label let it install BESIDE stock ARMSX2 instead of
+      # replacing it, so saves and settings in the stock app are untouched.
+      - name: Build APK
+        run: |
+          ./gradlew :app:assembleGithubDebug \
+            -Parmsx2.hostPageSize="${{ inputs.page_size || '0x1000' }}" \
+            -Parmsx2.applicationId=com.armsx2.dualscreen \
+            "-Parmsx2.appLabel=ARMSX2 Dual Screen" \
+            --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: armsx2-dualscreen-arm64
+          path: platforms/android/app/build/outputs/apk/github/debug/*.apk
+          if-no-files-found: error

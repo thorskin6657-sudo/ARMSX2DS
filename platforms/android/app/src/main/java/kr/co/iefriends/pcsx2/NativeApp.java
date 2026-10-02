@@ -297,6 +297,11 @@ public class NativeApp {
 	 *  no client, or RP not supported by the loaded set. */
 	public static native String getRichPresence();
 
+	/** Dual-screen companion RAM reader. Reads each (addrs[i], lens[i]) range of EE main RAM and
+	 *  returns them concatenated in request order. Physical addresses; out-of-range ranges and
+	 *  calls with no VM running come back as zeros. Null only for a malformed request. */
+	public static native byte[] readEeMemory(int[] addrs, int[] lens);
+
 	/** RetroAchievements password login. Returns null on success or a
 	 *  human-readable error string. Synchronous — runs the HTTP login
 	 *  request to completion, may take a few seconds. Callers MUST

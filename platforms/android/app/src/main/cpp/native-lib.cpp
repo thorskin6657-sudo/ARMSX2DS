@@ -20,6 +20,7 @@
 #include "SIO/Sio.h" // MemcardBusy — save-state refusal reason
 #include "pcsx2/Patch.h"
 #include "pcsx2/R5900.h"
+#include "pcsx2/Memory.h" // eeMem, for the dual-screen companion RAM reader
 #include <atomic>
 #include <chrono> // shader-cache flush throttle
 #include <thread>
@@ -597,6 +598,59 @@ Java_kr_co_iefriends_pcsx2_NativeApp_getRichPresence(JNIEnv *env, jclass clazz) 
     if (!Achievements::HasRichPresence())
         return env->NewStringUTF("");
     return env->NewStringUTF(Achievements::GetRichPresenceString().c_str());
+}
+
+// Dual-screen companion RAM reader. Reads one or more ranges of EE main RAM in a single call and
+// returns them concatenated, in the order requested. Addresses are physical (0 .. ExposedRam), the
+// same numbering cheat codes and RetroAchievements use. A range that falls outside RAM, or a
+// request made with no VM running, is returned as zeros rather than failing the whole batch, so a
+// profile with one bad address still renders the rest. Read-only: the panel never writes game RAM.
+// The reads race with the emulation thread on purpose -- a torn value shows up for one refresh and
+// is gone the next, which is the same trade the RetroAchievements poll makes.
+extern "C"
+JNIEXPORT jbyteArray JNICALL
+Java_kr_co_iefriends_pcsx2_NativeApp_readEeMemory(JNIEnv *env, jclass clazz,
+                                                  jintArray j_addrs, jintArray j_lens) {
+    if (!j_addrs || !j_lens)
+        return nullptr;
+    const jsize n = env->GetArrayLength(j_addrs);
+    if (n <= 0 || n != env->GetArrayLength(j_lens))
+        return nullptr;
+
+    std::vector<jint> addrs(static_cast<size_t>(n));
+    std::vector<jint> lens(static_cast<size_t>(n));
+    env->GetIntArrayRegion(j_addrs, 0, n, addrs.data());
+    env->GetIntArrayRegion(j_lens, 0, n, lens.data());
+
+    // Cap the whole batch so a bad profile cannot ask for an enormous allocation. 8 MB is enough
+    // for the RAM search tool to pull all 32 MB of EE RAM in four calls.
+    constexpr int64_t kMaxTotal = 8 * 1024 * 1024;
+    int64_t total = 0;
+    for (jsize i = 0; i < n; i++) {
+        if (lens[i] < 0)
+            return nullptr;
+        total += lens[i];
+        if (total > kMaxTotal)
+            return nullptr;
+    }
+
+    std::vector<jbyte> out(static_cast<size_t>(total), 0);
+    if (VMManager::HasValidVM() && eeMem) {
+        const uint64_t ramSize = Ps2MemSize::ExposedRam;
+        size_t pos = 0;
+        for (jsize i = 0; i < n; i++) {
+            const uint64_t a = static_cast<uint32_t>(addrs[i]);
+            const uint64_t len = static_cast<uint32_t>(lens[i]);
+            if (len > 0 && a + len <= ramSize)
+                std::memcpy(out.data() + pos, &eeMem->Main[a], static_cast<size_t>(len));
+            pos += static_cast<size_t>(len);
+        }
+    }
+
+    jbyteArray result = env->NewByteArray(static_cast<jsize>(total));
+    if (result && total > 0)
+        env->SetByteArrayRegion(result, 0, static_cast<jsize>(total), out.data());
+    return result;
 }
 
 // RetroAchievements password login. Synchronous — Achievements::Login waits

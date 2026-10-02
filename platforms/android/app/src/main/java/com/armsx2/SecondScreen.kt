@@ -16,6 +16,10 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.toArgb
+import com.armsx2.companion.CompanionPanel
+import com.armsx2.companion.CompanionProfile
+import com.armsx2.companion.CompanionProfiles
+import com.armsx2.companion.CompanionTheme
 import com.armsx2.i18n.I18n
 import com.armsx2.runtime.MainActivityRuntime
 import kr.co.iefriends.pcsx2.NativeApp
@@ -194,6 +198,27 @@ object SecondScreen {
      *  should never surprise someone who plugs into a TV or casts (asked for by Shane [TDD]). */
     val enabled = mutableStateOf(false)
 
+    // ---- Per-game companion -----------------------------------------------------------------
+    /** When a game has a companion profile, show it on the panel instead of the tile grid.
+     *  On by default; a game with no profile always shows the normal tiles. */
+    private const val PREF_COMPANION = "secondScreen.companion"
+    val companionEnabled = mutableStateOf(true)
+
+    /** Adds the RAM search tab to the companion, and gives games with no profile a RAM-search-only
+     *  view (reachable from the tile grid). For making profiles; on by default for now. */
+    private const val PREF_COMPANION_DEV = "secondScreen.companionDevTools"
+    val companionDevTools = mutableStateOf(true)
+
+    fun setCompanionDevTools(value: Boolean) {
+        companionDevTools.value = value
+        runCatching { MainActivityRuntime.prefs.edit().putBoolean(PREF_COMPANION_DEV, value).apply() }
+    }
+
+    fun setCompanionEnabled(value: Boolean) {
+        companionEnabled.value = value
+        runCatching { MainActivityRuntime.prefs.edit().putBoolean(PREF_COMPANION, value).apply() }
+    }
+
     private var presentation: Panel? = null
     private var listener: DisplayManager.DisplayListener? = null
     private val handler = Handler(Looper.getMainLooper())
@@ -202,6 +227,8 @@ object SecondScreen {
         runCatching {
             enabled.value = MainActivityRuntime.prefs.getBoolean(PREF_KEY, false)
             moveOsd.value = MainActivityRuntime.prefs.getBoolean(PREF_OSD_KEY, true)
+            companionEnabled.value = MainActivityRuntime.prefs.getBoolean(PREF_COMPANION, true)
+            companionDevTools.value = MainActivityRuntime.prefs.getBoolean(PREF_COMPANION_DEV, true)
         }
         loadBackground()
         loadTempInterval()
@@ -394,6 +421,17 @@ object SecondScreen {
         /** Rows that only make sense with a game running; hidden in the library. */
         private val gameRows = mutableListOf<View>()
         private var ticking = false
+
+        // Per-game companion. The host sits under the tile grid; when a profile matches the running
+        // game it holds the companion and the grid is hidden, and "Tiles" / "Companion" flip between.
+        private lateinit var companionHost: android.widget.FrameLayout
+        private lateinit var companionBack: Button
+        private var companion: CompanionPanel? = null
+        private var companionProfile: CompanionProfile? = null
+        private var companionGameKey: String? = null
+        private var companionSerial: String = ""
+        private var showTilesInstead = false
+
         private val tick = object : Runnable {
             override fun run() {
                 if (!ticking) return
@@ -535,6 +573,24 @@ object SecondScreen {
                 tileViews[tile] = view
             }
             rootView.addView(grid, lp())
+
+            // The way back from the tile grid to the companion. Only visible when a profile exists
+            // for the running game and the user has chosen tiles.
+            companionBack = Button(context).apply {
+                text = "Companion"
+                isAllCaps = false
+                visibility = View.GONE
+                setOnClickListener { showTilesInstead = false; updateStats() }
+            }
+            rootView.addView(companionBack, lp())
+
+            // Weighted so it takes whatever height is left; the ScrollView below uses
+            // isFillViewport, which is what gives this root a definite height to share out.
+            companionHost = android.widget.FrameLayout(context).apply { visibility = View.GONE }
+            rootView.addView(
+                companionHost,
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+            )
 
             // Scrollable, because the panel has no say in how tall it gets: the user picks how
             // many tiles are on it and how tall each one is, and a fixed root simply clipped
@@ -757,21 +813,25 @@ object SecondScreen {
         }
 
         /** What an action tile does. Kept in one place so the tile list stays declarative. */
+        /** Pause / resume exactly as the PAUSE tile does; the RAM search tool shares it. */
+        private fun togglePause() {
+            if (MainActivityRuntime.eState.value == EmuState.PAUSED) {
+                MainActivityRuntime.resume()
+            } else {
+                // Mark it deliberate FIRST. This is the only pause that leaves the game
+                // uncovered, and the stuck-paused backstop resumes exactly that state
+                // unless it is told the user meant it. resume() clears the flag.
+                MainActivityRuntime.userHeldPause.value = true
+                MainActivityRuntime.pause()
+            }
+        }
+
         private fun fire(tile: SecondScreenTile) {
             when (tile) {
                 SecondScreenTile.SAVE -> MainActivityRuntime.instance?.saveState()
                 SecondScreenTile.LOAD -> MainActivityRuntime.instance?.loadState()
                 SecondScreenTile.FAST_FORWARD -> MainActivityRuntime.instance?.toggleFastForward()
-                SecondScreenTile.PAUSE ->
-                    if (MainActivityRuntime.eState.value == EmuState.PAUSED) {
-                        MainActivityRuntime.resume()
-                    } else {
-                        // Mark it deliberate FIRST. This is the only pause that leaves the game
-                        // uncovered, and the stuck-paused backstop resumes exactly that state
-                        // unless it is told the user meant it. resume() clears the flag.
-                        MainActivityRuntime.userHeldPause.value = true
-                        MainActivityRuntime.pause()
-                    }
+                SecondScreenTile.PAUSE -> togglePause()
                 // The panel knows its own display; the settings screen does not.
                 SecondScreenTile.NOT_HERE -> ignoreDisplay(display?.name.orEmpty())
                 SecondScreenTile.SCREENSHOT ->
@@ -845,6 +905,71 @@ object SecondScreen {
                 setOnClickListener { runCatching { onClick() } }
             }
 
+        /** Decide whether the companion or the tile grid is showing, and (re)build the companion
+         *  when the running game changes. Cheap on the steady state: the serial is only asked for
+         *  when the game's title changes or no serial has resolved yet. */
+        private fun syncCompanion(inGame: Boolean, title: String) {
+            if (!inGame || !companionEnabled.value) {
+                showCompanion(null)
+                companionGameKey = null
+                return
+            }
+            if (companionGameKey != title) {
+                val serial = runCatching { NativeApp.getGameSerial() }.getOrNull()
+                // Boot can report an empty serial for a moment; try again next tick rather than
+                // caching "no profile" for the whole session.
+                if (serial.isNullOrBlank()) return
+                companionGameKey = title
+                companionSerial = serial.trim().uppercase()
+                val real = CompanionProfiles.forSerial(context.applicationContext, serial)
+                    ?.takeIf { it.hasAnyPanel }
+                // No profile: with dev tools on, fall back to a RAM-search-only view, but leave the
+                // normal tiles showing -- a game with no companion should look the way it always did.
+                companionProfile = real
+                    ?: if (companionDevTools.value) CompanionProfile.searchOnly(companionSerial, "RAM search") else null
+                showTilesInstead = real == null && companionProfile != null
+                companion?.stop()
+                companionHost.removeAllViews()
+                companion = null
+            }
+            showCompanion(companionProfile)
+        }
+
+        private fun showCompanion(profile: CompanionProfile?) {
+            val active = profile != null && !showTilesInstead
+            if (profile != null && companion == null) {
+                val theme = CompanionTheme(
+                    tile = TILE_ACTION, text = TEXT, dim = TEXT_DIM, accent = ACCENT, border = BORDER,
+                )
+                val panel = CompanionPanel(
+                    context, profile, theme,
+                    devTools = companionDevTools.value,
+                    serial = { companionSerial },
+                    isPaused = { MainActivityRuntime.eState.value == EmuState.PAUSED },
+                    onTogglePause = { togglePause() },
+                ) { showTilesInstead = true; updateStats() }
+                companion = panel
+                companionHost.addView(
+                    panel,
+                    android.widget.FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+            }
+            companionHost.visibility = if (active) View.VISIBLE else View.GONE
+            companionBack.text = if (profile?.searchOnly == true) "RAM search" else "Companion"
+            companionBack.visibility = if (profile != null && showTilesInstead) View.VISIBLE else View.GONE
+            // The grid and the library placeholder belong to the tile view only.
+            if (active) {
+                grid.visibility = View.GONE
+                idleLabel.visibility = View.GONE
+                if (ticking) companion?.start()
+            } else {
+                grid.visibility = View.VISIBLE
+                companion?.stop()
+            }
+        }
+
         private fun updateStats() {
             // In the library there is no VM, so save/load/pause/FF/screenshot and the macros are
             // all dead buttons — hide them and say so rather than showing controls that do nothing.
@@ -852,6 +977,7 @@ object SecondScreen {
                 MainActivityRuntime.eState.value == EmuState.PAUSED
             gameRows.forEach { it.visibility = if (inGame) View.VISIBLE else View.GONE }
             idleLabel.visibility = if (inGame) View.GONE else View.VISIBLE
+            syncCompanion(inGame, MainActivityRuntime.currentGame.value?.title.orEmpty())
 
             val fps = runCatching { NativeApp.getFPS() }.getOrDefault(0f)
             val title = MainActivityRuntime.currentGame.value?.title.orEmpty()
@@ -1079,11 +1205,13 @@ object SecondScreen {
             super.onStart()
             ticking = true
             handler.post(tick)
+            if (companionHost.visibility == View.VISIBLE) companion?.start()
         }
 
         override fun onStop() {
             ticking = false
             handler.removeCallbacks(tick)
+            companion?.stop()
             super.onStop()
         }
     }

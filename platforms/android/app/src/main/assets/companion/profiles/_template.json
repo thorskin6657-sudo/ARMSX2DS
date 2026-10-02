@@ -1,0 +1,64 @@
+{
+  "id": "template",
+  "title": "Template (copy me)",
+  "serials": ["TEMPLATE-00000"],
+  "verified": false,
+  "pollMs": 250,
+  "notes": "Addresses are physical EE RAM (0x00000000-0x01FFFFFF). Cheat-style 0x2xxxxxxx and KSEG 0x8xxxxxxx prefixes are accepted and stripped. Every address below is a PLACEHOLDER.",
+
+  "stats": [
+    { "label": "HP", "addr": "0x00100000", "type": "u16", "max": { "addr": "0x00100002", "type": "u16" } },
+    { "label": "Gold", "addr": "0x00100010", "type": "u32", "unit": "G" },
+    { "label": "Time of day", "addr": "0x00100020", "type": "u8", "names": { "0": "Morning", "1": "Day", "2": "Night" } }
+  ],
+
+  "party": {
+    "base": "0x00101000",
+    "count": 4,
+    "stride": "0x80",
+    "skipEmpty": true,
+    "fields": [
+      { "key": "name", "label": "Name", "offset": "0x00", "text": { "length": 12, "charset": "ascii" } },
+      { "key": "hp",   "label": "HP",   "offset": "0x20", "type": "u16", "maxOffset": "0x22" },
+      { "key": "mp",   "label": "MP",   "offset": "0x24", "type": "u16", "maxOffset": "0x26" },
+      { "key": "lv",   "label": "Level","offset": "0x28", "type": "u8" }
+    ]
+  },
+
+  "inventory": {
+    "base": "0x00102000",
+    "count": 64,
+    "stride": 4,
+    "idOffset": 0,
+    "idType": "u16",
+    "qtyOffset": 2,
+    "qtyType": "u16",
+    "emptyId": 0,
+    "names": { "1": "Potion", "2": "Ether", "3": "Antidote" }
+  },
+
+  "map": {
+    "x": { "addr": "0x00103000", "type": "f32" },
+    "y": { "addr": "0x00103008", "type": "f32" },
+    "heading": { "addr": "0x0010300C", "type": "f32", "scale": 57.29578 },
+    "areaId": { "addr": "0x00103010", "type": "u16" },
+    "trail": true,
+    "invertY": false,
+    "areas": [
+      {
+        "id": 1,
+        "name": "Starting town",
+        "image": "companion/maps/starting_town.png",
+        "bounds": { "minX": -500, "maxX": 500, "minY": -500, "maxY": 500 },
+        "markers": [ { "label": "Inn", "x": 120, "y": -40 } ]
+      }
+    ]
+  },
+
+  "buttons": [
+    { "label": "L3", "keys": ["L3"] },
+    { "label": "R3", "keys": ["R3"] },
+    { "label": "Select", "keys": ["SELECT"] },
+    { "label": "L1+R1", "keys": ["L1", "R1"] }
+  ]
+}

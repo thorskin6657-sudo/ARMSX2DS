@@ -1,0 +1,26 @@
+{
+  "id": "katamari-damacy-usa",
+  "title": "Katamari Damacy (USA)",
+  "serials": ["SLUS-21008"],
+  "verified": false,
+  "pollMs": 250,
+  "notes": "STARTER profile. Addresses come from the raw NTSC-U codes on GameHacking.org (Freeze Time / Resume Time, Time Modifier, Player 1 Ball Size / Speed / Appearance Size, Level Select). Those codes write a value without saying its format, so time and size are each shown as BOTH an f32 and a raw u32: compare with the on-screen timer and ball size, then tell me which reading is right and I will drop the other. Player 2 equivalents: ball size 0x0098C4DC, speed 0x0098C4E8, appearance size 0x0098C4F0. Also published but not shown: a 22-record level-completion table starting at 0x0055FF9C (record stride unconfirmed) and a collectibles flag table at 0x0055F664.",
+
+  "stats": [
+    { "label": "Timer", "addr": "0x0054EAA4", "type": "u8", "names": { "0": "Stopped", "1": "Running" } },
+    { "label": "Time (as f32)", "addr": "0x0054EAA8", "type": "f32" },
+    { "label": "Time (as u32)", "addr": "0x0054EAA8", "type": "u32" },
+    { "label": "Ball size (as f32)", "addr": "0x009889BC", "type": "f32" },
+    { "label": "Ball size (as u32)", "addr": "0x009889BC", "type": "u32" },
+    { "label": "Appearance size (as f32)", "addr": "0x009889D0", "type": "f32" },
+    { "label": "Speed (as f32)", "addr": "0x009889C8", "type": "f32" },
+    { "label": "Level index (raw)", "addr": "0x0054EA94", "type": "u8" }
+  ],
+
+  "buttons": [
+    { "label": "Select", "keys": ["SELECT"] },
+    { "label": "Start", "keys": ["START"] },
+    { "label": "L3", "keys": ["L3"] },
+    { "label": "R3", "keys": ["R3"] }
+  ]
+}

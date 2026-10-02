@@ -1,0 +1,20 @@
+{
+  "id": "sotc-ps2-usa",
+  "title": "Shadow of the Colossus (USA)",
+  "serials": ["SCUS-97472"],
+  "verified": false,
+  "pollMs": 250,
+  "notes": "STARTER profile. The only addresses published for the NTSC-U build that are data (not code patches) are in the 0x012DA3E0-0x012DA444 save-data block: item flags at 0x012DA3E0 and 0x012DA3E4 (the 'have all items' cheat writes FFFFFFFF to both), a Time Trial unlock word at 0x012DA3F4, and 16 time-attack record words for colossi 1-16 at 0x012DA408-0x012DA444 (stride 4). Their exact formats are unconfirmed, so they are shown raw. Wander's health, grip, stamina, colossus health and world position are NOT published anywhere readable and still need to be found with the RAM search tool. The GameShark v3 codes for health and grip are encrypted and cannot be used as addresses.",
+
+  "stats": [
+    { "label": "Item flags A (raw)", "addr": "0x012DA3E0", "type": "u32" },
+    { "label": "Item flags B (raw)", "addr": "0x012DA3E4", "type": "u32" },
+    { "label": "Time Trial word (raw)", "addr": "0x012DA3F4", "type": "u32" }
+  ],
+
+  "buttons": [
+    { "label": "Hold R1", "keys": ["R1"], "latch": true },
+    { "label": "Select", "keys": ["SELECT"] },
+    { "label": "Start", "keys": ["START"] }
+  ]
+}

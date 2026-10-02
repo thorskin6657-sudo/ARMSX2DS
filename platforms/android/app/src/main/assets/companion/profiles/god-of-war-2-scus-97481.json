@@ -1,0 +1,20 @@
+{
+  "id": "god-of-war-2-usa",
+  "title": "God of War II (USA)",
+  "serials": ["SCUS-97481"],
+  "verified": false,
+  "pollMs": 250,
+  "notes": "STARTER profile. Addresses come from the raw CodeBreaker v7+ NTSC-U codes on GameHacking.org. The Infinite Health code writes the float 200.0 to TWO addresses (0x00959B18 and 0x002D8748); which one is the live health and which is a mirror or the maximum is unconfirmed, so both are shown. Red orbs (0x0071C3BC) is a plain 32-bit integer (the 60,000 Red Orbs code writes 0xEA60). Magic and Rage of the Titans have no published raw addresses, only encrypted ARMax and GameShark codes that cannot be read as addresses, so they need the RAM search tool.",
+
+  "stats": [
+    { "label": "Red orbs", "addr": "0x0071C3BC", "type": "u32" },
+    { "label": "Health (copy A, f32)", "addr": "0x00959B18", "type": "f32" },
+    { "label": "Health (copy B, f32)", "addr": "0x002D8748", "type": "f32" }
+  ],
+
+  "buttons": [
+    { "label": "L3 + R3", "keys": ["L3", "R3"] },
+    { "label": "Select", "keys": ["SELECT"] },
+    { "label": "Start", "keys": ["START"] }
+  ]
+}

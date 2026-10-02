@@ -1,0 +1,26 @@
+{
+  "id": "re4-ps2-usa",
+  "title": "Resident Evil 4 (USA)",
+  "serials": ["SLUS-21134"],
+  "verified": false,
+  "pollMs": 250,
+  "notes": "STARTER profile. Only addresses taken from published NTSC-U cheat codes are filled in: Leon HP (0x0042DA76), Ashley HP (0x0042DA7A) and the active-character byte (0x0042DA8A). Ammo, pesetas, inventory and position are not published anywhere I could read and still need to be found in a running game.",
+
+  "stats": [
+    { "label": "Leon HP", "addr": "0x0042DA76", "type": "u16" },
+    { "label": "Ashley HP", "addr": "0x0042DA7A", "type": "u16" },
+    {
+      "label": "Character",
+      "addr": "0x0042DA8A",
+      "type": "u8",
+      "names": { "0": "Leon", "1": "Ashley", "2": "Ada", "3": "Hunk", "4": "Krauser", "5": "Wesker" }
+    }
+  ],
+
+  "buttons": [
+    { "label": "Select", "keys": ["SELECT"] },
+    { "label": "Start", "keys": ["START"] },
+    { "label": "L3", "keys": ["L3"] },
+    { "label": "R3", "keys": ["R3"] }
+  ]
+}
