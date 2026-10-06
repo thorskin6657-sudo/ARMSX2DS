@@ -78,11 +78,24 @@ jobs:
       # replacing it, so saves and settings in the stock app are untouched.
       - name: Build APK
         run: |
+          set -o pipefail
           ./gradlew :app:assembleGithubDebug \
             -Parmsx2.hostPageSize="${{ inputs.page_size || '0x1000' }}" \
             -Parmsx2.applicationId=com.armsx2.dualscreen \
             "-Parmsx2.appLabel=ARMSX2 Dual Screen" \
-            --stacktrace
+            --stacktrace 2>&1 | tee build.log
+
+      # On failure, put the error lines into the run's annotations (visible on the run summary page
+      # and through the API) so the cause can be read without downloading the full log.
+      - name: Report build errors
+        if: failure()
+        run: |
+          [ -f build.log ] || { echo "::error::build.log missing"; exit 0; }
+          esc() { python3 -c 'import sys;d=sys.stdin.read();print(d.replace("%","%25").replace("\r","%0D").replace("\n","%0A"),end="")'; }
+          ERR=$(grep -nE "^e: |error:|FAILED|What went wrong|Execution failed|Could not |CMake Error|ninja: build stopped|undefined reference|Unresolved reference|Type mismatch|cannot find symbol" build.log | head -40 | cut -c1-400 | esc)
+          TAIL=$(tail -n 60 build.log | cut -c1-300 | esc)
+          echo "::error title=Matched error lines::${ERR}"
+          echo "::error title=Last 60 log lines::${TAIL}"
 
       - name: Upload APK
         uses: actions/upload-artifact@v7
