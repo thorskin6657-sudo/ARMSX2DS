@@ -214,6 +214,7 @@ class CompanionPanel(
             Tab.PARTY -> drawParty(snap)
             Tab.ITEMS -> drawItems(snap)
             Tab.MAP -> drawMap(snap)
+            Tab.SEARCH -> Unit // handled above: the search tab does its own reading
         }
     }
 
